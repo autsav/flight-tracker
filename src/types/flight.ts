@@ -16,6 +16,9 @@ export interface Flight {
     time: string; // ISO string
     timezone: string;
   };
-  status: 'On Time' | 'Delayed' | 'Cancelled' | 'Arrived';
+  status: 'On Time' | 'Delayed' | 'Cancelled' | 'Arrived' | 'In Air' | 'On Ground';
   duration: string;
+  altitude?: number; // in meters
+  speed?: number;    // in m/s
+  heading?: number;  // in degrees
 }

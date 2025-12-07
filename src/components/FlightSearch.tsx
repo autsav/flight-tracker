@@ -20,7 +20,13 @@ export function FlightSearch({ onSearch }: FlightSearchProps) {
         try {
             const response = await fetch(`/api/flights?flightNumber=${encodeURIComponent(query)}`);
             const data = await response.json();
-            onSearch(data);
+
+            if (Array.isArray(data)) {
+                onSearch(data);
+            } else {
+                console.error('Unexpected API response:', data);
+                onSearch([]);
+            }
         } catch (error) {
             console.error('Error fetching flights:', error);
             onSearch([]);
