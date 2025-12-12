@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { OpenSkyResponse, OpenSkyStateVector } from '@/types/opensky';
-import { mapOpenSkyStateToFlight } from '@/lib/flight-mapper';
+import { AviationStackResponse } from '@/types/aviation-stack';
+import { mapOpenSkyStateToFlight, mapAviationStackFlightToFlight } from '@/lib/flight-mapper';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -10,6 +11,33 @@ export async function GET(request: Request) {
         return NextResponse.json([]);
     }
 
+    const aviationStackKey = process.env.AVIATION_STACK_ACCESS_KEY;
+
+    // 1. Try AviationStack if key is present
+    if (aviationStackKey && aviationStackKey !== 'YOUR_ACCESS_KEY_HERE') {
+        try {
+            // Using HTTPS as suggested by review
+            const response = await fetch(
+                `https://api.aviationstack.com/v1/flights?access_key=${aviationStackKey}&flight_iata=${query}`,
+                { next: { revalidate: 60 } }
+            );
+
+            if (response.ok) {
+                const data: AviationStackResponse = await response.json();
+                if (data.data && data.data.length > 0) {
+                    const flights = data.data.map(mapAviationStackFlightToFlight);
+                    return NextResponse.json(flights);
+                }
+            } else {
+                 console.warn(`AviationStack API Error: ${response.status} ${response.statusText}`);
+            }
+        } catch (error) {
+            console.error('Error fetching from AviationStack:', error);
+            // Fallthrough to OpenSky
+        }
+    }
+
+    // 2. Fallback to OpenSky
     try {
         // OpenSky /states/all returns ALL live flights (heavy payload).
         // Ideally we would filter by bounding box, but for global search we fetch all.
