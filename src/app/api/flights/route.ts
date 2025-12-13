@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { OpenSkyResponse, OpenSkyStateVector } from '@/types/opensky';
-import { mapOpenSkyStateToFlight } from '@/lib/flight-mapper';
+import { AviationStackResponse } from '@/types/aviation-stack';
+import { mapOpenSkyStateToFlight, mapAviationStackFlightToFlight } from '@/lib/flight-mapper';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -8,6 +9,37 @@ export async function GET(request: Request) {
 
     if (!query) {
         return NextResponse.json([]);
+    }
+
+    // Prioritize AviationStack
+    const accessKey = process.env.AVIATION_STACK_ACCESS_KEY;
+    if (accessKey) {
+        try {
+            const response = await fetch(`https://api.aviationstack.com/v1/flights?access_key=${accessKey}&flight_iata=${query}`, {
+                next: { revalidate: 60 }
+            });
+
+            if (response.ok) {
+                const data: AviationStackResponse = await response.json();
+                if (data.data && data.data.length > 0) {
+                    // Filter out non-active flights if needed, or just take the first one
+                    // AviationStack returns an array, sometimes historical. We want the most recent active/scheduled one.
+                    // For now, let's just map all of them and return. But the frontend expects an array.
+                    // Let's return the mapped flights.
+
+                    const flights = data.data.map(mapAviationStackFlightToFlight);
+                    // Filter to match query exactly if needed, but the API param flight_iata should handle it.
+                    // However, we might want to ensure we are returning something relevant.
+
+                    if (flights.length > 0) {
+                        return NextResponse.json(flights);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching from AviationStack:', error);
+            // Fallback to OpenSky
+        }
     }
 
     try {
